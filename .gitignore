@@ -1,0 +1,42 @@
+# Secrets
+.env
+.env.*
+!.env.example
+garmin-tokens/
+
+# Données personnelles et générées
+data/
+exports/
+backups/
+
+# Base de données locale éventuelle
+postgres/data/
+
+# Python
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+.venv/
+venv/
+
+# Fichiers temporaires d’éditeur
+*.swp
+*.swo
+*~
+.idea/
+.vscode/
+
+# Données et exports, même s'ils sont déplacés
+*.fit
+*.xlsx
+*.dump
+*.sql
+*.sql.gz
+
+# Système
+.DS_Store
+Thumbs.db

@@ -1,0 +1,47 @@
+services:
+
+  sport-db:
+    image: postgres:17
+    container_name: sport-db
+    restart: unless-stopped
+
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB}
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+
+    volumes:
+      - sport_postgres_data:/var/lib/postgresql/data
+
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  sport-backend:
+    build:
+      context: ./backend
+
+    container_name: sport-backend
+    restart: unless-stopped
+
+    environment:
+      DATABASE_URL: ${DATABASE_URL}
+      COACH_API_KEY: ${COACH_API_KEY}
+
+    ports:
+      - "8000:8000"
+
+    volumes:
+      - ./backend/alembic:/app/alembic
+      - ./garmin-tokens:/var/lib/sport/garmin
+      - ./data:/var/lib/sport/data
+      - ./exports:/var/lib/sport/exports
+
+    depends_on:
+      sport-db:
+        condition: service_healthy
+
+volumes:
+  sport_postgres_data:
