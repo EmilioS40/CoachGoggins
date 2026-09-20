@@ -1,0 +1,169 @@
+openapi: 3.0.3
+info:
+  title: Sport Coach API
+  version: 1.0.0
+  description: >-
+    Read-only API for a personal running and trail coach. Start with compact
+    summaries; retrieve detailed records only when a question requires them.
+servers:
+  - url: https://rpi-home.tail3f4428.ts.net
+    description: Personal Raspberry Pi, published through Tailscale Funnel.
+security:
+  - bearerAuth: []
+paths:
+  /api/coach/context:
+    get:
+      operationId: getTrainingContext
+      summary: Get recent training context
+      description: >-
+        Returns totals, weekly aggregates, and recent activities. Use this first
+        for a general form, consistency, or workload question.
+      parameters:
+        - name: days
+          in: query
+          required: false
+          description: Number of days to include.
+          schema:
+            type: integer
+            minimum: 7
+            maximum: 365
+            default: 42
+      responses:
+        '200':
+          description: Training context.
+          content:
+            application/json:
+              schema:
+                type: object
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /api/coach/activity/latest:
+    get:
+      operationId: getLatestActivity
+      summary: Get the latest matching activity
+      description: >-
+        Use sport_type=trail for a trail request. The response includes the
+        Garmin activity ID required for the detailed endpoints.
+      parameters:
+        - name: sport_type
+          in: query
+          required: false
+          description: Case-insensitive sport-type filter, for example trail.
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Latest matching activity.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ActivitySummary'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          description: No matching activity was found.
+
+  /api/coach/activity/{garmin_id}:
+    get:
+      operationId: getActivityDetail
+      summary: Get an activity summary and laps
+      description: >-
+        Returns the main activity metrics, laps, and the number of detailed
+        records available. This is normally sufficient for a session analysis.
+      parameters:
+        - name: garmin_id
+          in: path
+          required: true
+          description: Garmin activity identifier returned by another endpoint.
+          schema:
+            type: integer
+            format: int64
+      responses:
+        '200':
+          description: Activity details and lap summaries.
+          content:
+            application/json:
+              schema:
+                type: object
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          description: Activity not found.
+
+  /api/coach/activity/{garmin_id}/records:
+    get:
+      operationId: getActivityRecords
+      summary: Get sampled detailed activity records
+      description: >-
+        Use only when an analysis needs altitude, speed, heart rate, cadence,
+        power, or running dynamics over the course of an activity. The response
+        can include GPS coordinates; do not repeat precise locations to the user.
+      parameters:
+        - name: garmin_id
+          in: path
+          required: true
+          description: Garmin activity identifier.
+          schema:
+            type: integer
+            format: int64
+        - name: every
+          in: query
+          required: false
+          description: Return one record every N samples. Prefer 10 initially.
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 60
+            default: 10
+      responses:
+        '200':
+          description: Sampled detailed records.
+          content:
+            application/json:
+              schema:
+                type: object
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          description: Activity not found.
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: API key
+  responses:
+    Unauthorized:
+      description: Missing or invalid Bearer API key.
+  schemas:
+    ActivitySummary:
+      type: object
+      properties:
+        garmin_id:
+          type: integer
+          format: int64
+        date:
+          type: string
+          format: date-time
+        name:
+          type: string
+        sport_type:
+          type: string
+        distance_km:
+          type: number
+        duration_min:
+          type: number
+        pace_s_per_km:
+          type: number
+          nullable: true
+        elevation_gain_m:
+          type: number
+          nullable: true
+        average_heartrate:
+          type: number
+          nullable: true
+        average_power_w:
+          type: number
+          nullable: true

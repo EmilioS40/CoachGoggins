@@ -1,0 +1,14 @@
+[Unit]
+Description=Sport API Tailscale Funnel
+After=network-online.target tailscaled.service docker.service
+Wants=network-online.target
+Requires=tailscaled.service
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=/usr/bin/tailscale funnel --bg http://127.0.0.1:8000
+ExecStop=/usr/bin/tailscale funnel --https=443 off
+
+[Install]
+WantedBy=multi-user.target

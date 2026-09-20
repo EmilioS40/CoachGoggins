@@ -1,0 +1,6 @@
+[Unit]
+Description=Sport stack health check
+
+[Service]
+Type=oneshot
+ExecStart=/usr/bin/bash /opt/sport/scripts/check-sport-stack.sh

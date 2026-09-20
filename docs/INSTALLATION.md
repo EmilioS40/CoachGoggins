@@ -320,6 +320,8 @@ docker compose exec sport-backend \
 ```
 
 Une seconde exécution sans nouvelle activité ne doit pas créer de doublons.
+Lorsqu'au moins une nouvelle activité est importée, la synchronisation regenere
+automatiquement `/opt/sport/exports/Sport_report.xlsx`.
 
 ### 11.2 Vérifier les activités
 
@@ -410,13 +412,16 @@ docker compose exec sport-backend \
 Vérifier le fichier :
 
 ```bash
-ls -lh /opt/sport/exports/sport.xlsx
-file /opt/sport/exports/sport.xlsx
+ls -lh /opt/sport/exports/Sport_report.xlsx
+file /opt/sport/exports/Sport_report.xlsx
 ```
 
 Le classeur est reconstruit depuis PostgreSQL. Il peut être supprimé puis régénéré.
+La synchronisation Garmin le regenere automatiquement lorsqu'elle ajoute une
+nouvelle activité.
 
-Le coach voit les nouvelles activités via l'API immédiatement après la synchronisation. Excel ne les voit qu'après cette commande.
+Le coach voit les nouvelles activités via l'API immédiatement après la
+synchronisation. Le rapport Excel est mis à jour dans le même cycle.
 
 ## 14. Utiliser l'API coach localement
 
@@ -452,50 +457,110 @@ Ne jamais copier la clé dans une capture, un ticket, un commit ou une conversat
 
 ## 15. HTTPS et accès externe
 
-### 15.1 Test temporaire
+### 15.1 Tailscale Funnel
 
-Un Quick Tunnel peut valider l'accès sans ouvrir de port sur la box :
+Tailscale Funnel publie FastAPI en HTTPS sans acheter de nom de domaine et sans
+ouvrir de port sur la box. L'URL est fournie sous la forme
+`https://<nom-machine>.<tailnet>.ts.net`. PostgreSQL reste prive sur le reseau
+Docker et l'authentification Bearer FastAPI reste obligatoire.
 
-```bash
-docker run -d \
-  --name sport-cloudflared-test \
-  --network sport_default \
-  cloudflare/cloudflared:latest \
-  tunnel --no-autoupdate \
-  --protocol http2 \
-  --url http://sport-backend:8000
-```
-
-Afficher l'adresse générée :
+Installer Tailscale sur Debian 13 :
 
 ```bash
-docker logs -f sport-cloudflared-test
+sudo mkdir -p --mode=0755 /usr/share/keyrings
+
+curl -fsSL https://pkgs.tailscale.com/stable/debian/trixie.noarmor.gpg \
+  | sudo tee /usr/share/keyrings/tailscale-archive-keyring.gpg > /dev/null
+
+curl -fsSL https://pkgs.tailscale.com/stable/debian/trixie.tailscale-keyring.list \
+  | sudo tee /etc/apt/sources.list.d/tailscale.list
+
+sudo apt update
+sudo apt install -y tailscale
+sudo systemctl enable --now tailscaled
 ```
 
-Ce tunnel est temporaire. Son adresse change et il n'offre aucune garantie de disponibilité.
-
-Arrêter puis supprimer le test :
+Connecter la Pi au compte Tailscale. La commande affiche une URL a ouvrir dans
+un navigateur pour autoriser l'appareil :
 
 ```bash
-docker stop sport-cloudflared-test
-docker rm sport-cloudflared-test
+sudo tailscale up
+tailscale status
 ```
 
-### 15.2 Cible permanente
+Publier seulement le service FastAPI local et rendre la configuration
+persistante :
 
-La cible est un tunnel Cloudflare nommé avec un domaine géré par Cloudflare. La documentation officielle est disponible ici :
+```bash
+sudo tailscale funnel --bg http://127.0.0.1:8000
+sudo tailscale funnel status
+```
 
-- https://developers.cloudflare.com/tunnel/setup/
-- https://developers.cloudflare.com/tunnel/
+Tester d'abord sans secret :
 
-Le futur déploiement devra :
+```bash
+curl -i "https://<URL-TAILSCALE>/health"
+curl -i "https://<URL-TAILSCALE>/api/coach/context?days=42"
+```
 
-- ajouter un service `cloudflared` à `compose.yaml` ;
-- placer le token du tunnel dans `.env` ou, de préférence, dans un fichier secret ;
-- transmettre vers `http://sport-backend:8000` sur le réseau Docker ;
-- utiliser `restart: unless-stopped` ;
-- conserver PostgreSQL totalement inaccessible depuis Internet ;
-- conserver l'authentification Bearer de FastAPI même derrière Cloudflare.
+Le premier appel doit repondre `200`; le second `401` ou `403`. Tester avec la
+cle sans jamais l'afficher dans l'historique du terminal :
+
+```bash
+cd /opt/sport
+set -a
+. ./.env
+set +a
+
+curl -s \
+  -H "Authorization: Bearer $COACH_API_KEY" \
+  "https://<URL-TAILSCALE>/api/coach/activity/latest?sport_type=trail" \
+  | python -m json.tool
+```
+
+La commande `tailscale funnel --bg` survit aux redemarrages. Verifier apres un
+redemarrage avec :
+
+```bash
+sudo tailscale funnel status
+```
+
+Tailscale Funnel est adapte a l'usage personnel mais reste beta. Un domaine
+personnel et un reverse proxy peuvent etre ajoutes plus tard si le service
+devient public ou multi-utilisateur.
+
+### 15.2 Rendre l'acces plus robuste
+
+Le demarrage de Funnel est persistant, mais installer le service systemd permet
+de le reappliquer automatiquement apres un redemarrage. Le watchdog verifie
+egalement FastAPI, Docker et l'acces HTTPS public toutes les cinq minutes.
+
+Depuis `/opt/sport` :
+
+```bash
+sudo install -m 0755 scripts/check-sport-stack.sh /opt/sport/scripts/check-sport-stack.sh
+sudo install -m 0644 deploy/systemd/sport-funnel.service /etc/systemd/system/sport-funnel.service
+sudo install -m 0644 deploy/systemd/sport-stack-health.service /etc/systemd/system/sport-stack-health.service
+sudo install -m 0644 deploy/systemd/sport-stack-health.timer /etc/systemd/system/sport-stack-health.timer
+
+sudo systemctl daemon-reload
+sudo systemctl enable --now sport-funnel.service
+sudo systemctl enable --now sport-stack-health.timer
+```
+
+Verifier le fonctionnement :
+
+```bash
+systemctl status sport-funnel.service --no-pager
+systemctl status sport-stack-health.timer --no-pager
+systemctl list-timers sport-stack-health.timer
+journalctl -u sport-stack-health.service -n 50 --no-pager
+```
+
+La variable `SPORT_PUBLIC_URL` peut contenir l'URL publique Funnel dans `.env`.
+Elle est utilisee uniquement par le watchdog pour verifier le chemin HTTPS
+complet. Si elle est absente, l'URL actuelle de la Raspberry est utilisee par
+defaut.
 
 ## 16. Sauvegarder et restaurer PostgreSQL
 
@@ -634,7 +699,7 @@ cd /opt/sport
 git check-ignore -v \
   .env \
   garmin-tokens/garmin_tokens.json \
-  exports/sport.xlsx
+exports/Sport_report.xlsx
 git add --dry-run .
 ```
 
@@ -659,7 +724,6 @@ git commit -m "Initial sport platform"
 - [ ] Une synchronisation manuelle réussit.
 - [ ] Une seconde synchronisation ne crée pas de doublon.
 - [ ] La tâche planifiée apparaît dans `crontab -l`.
-- [ ] `sport.xlsx` est généré.
+- [ ] `Sport_report.xlsx` est généré.
 - [ ] L'API coach refuse les appels sans clé.
 - [ ] Une sauvegarde PostgreSQL est créée et copiée hors de la Pi.
-

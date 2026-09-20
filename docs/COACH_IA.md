@@ -24,7 +24,7 @@ L'URL de base dépend du déploiement :
 ```text
 Local : http://localhost:8000
 HTTPS temporaire : https://<nom-aleatoire>.trycloudflare.com
-HTTPS cible : https://<sous-domaine-stable>
+HTTPS actuel : https://rpi-home.tail3f4428.ts.net
 ```
 
 Tous les endpoints `/api/coach` exigent :
@@ -278,7 +278,7 @@ Questions utiles après une séance :
 Le fichier est situé sur la Raspberry Pi :
 
 ```text
-/opt/sport/exports/sport.xlsx
+/opt/sport/exports/Sport_report.xlsx
 ```
 
 Il contient une synthèse pratique :
@@ -289,7 +289,16 @@ Il contient une synthèse pratique :
 - records ;
 - comparaison annuelle.
 
-L'agent peut l'utiliser lorsqu'il lui est fourni directement ou lorsqu'un futur endpoint de téléchargement sera ajouté. Il ne doit pas supposer qu'il est à jour.
+L'API expose également :
+
+```http
+GET /api/coach/export/excel
+```
+
+Cet endpoint retourne le fichier `Sport_report.xlsx`. L'agent peut l'utiliser
+pour une vue tabulaire complète, mais il doit privilégier les endpoints JSON
+pour les analyses et ne doit pas supposer que le classeur est plus à jour que
+PostgreSQL.
 
 Il n'existe pas encore d'endpoint confirmé `GET /api/coach/export/excel`. Ne pas tenter de l'appeler tant qu'il n'a pas été implémenté et documenté.
 
@@ -412,5 +421,7 @@ Le connecteur HTTP du coach doit autoriser uniquement :
 - les méthodes nécessaires ;
 - les chemins `/health` et `/api/coach/*`.
 
-Une fois le tunnel HTTPS permanent en place, mettre à jour ici l'URL stable, le mécanisme de rotation de clé et les règles Cloudflare appliquées.
-
+L'instance actuelle est publiee par Tailscale Funnel. Son URL HTTPS est stable
+tant que le nom de la machine et le tailnet restent inchanges. La cle API reste
+rotative : la changer dans `.env`, reconstruire le backend, puis mettre a jour
+le secret de l'action GPT.

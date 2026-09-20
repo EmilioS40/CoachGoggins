@@ -18,7 +18,7 @@ from app.models.activity import Activity
 from app.models.activity_record import ActivityRecord
 
 
-EXPORT_PATH = Path("/var/lib/sport/exports/sport.xlsx")
+EXPORT_PATH = Path("/var/lib/sport/exports/Sport_report.xlsx")
 
 RUNNING_COLOR = "60A5FA"
 TRAIL_COLOR = "1D4ED8"

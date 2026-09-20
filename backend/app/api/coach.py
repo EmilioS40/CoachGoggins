@@ -21,7 +21,7 @@ router = APIRouter(
 
 @router.get("/export/excel")
 def coach_excel_export():
-    path = Path("/var/lib/sport/exports/sport.xlsx")
+    path = Path("/var/lib/sport/exports/Sport_report.xlsx")
 
     if not path.exists():
         raise HTTPException(
@@ -32,7 +32,7 @@ def coach_excel_export():
     return FileResponse(
         path,
         media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-        filename="sport.xlsx",
+        filename="Sport_report.xlsx",
     )
 
 def activity_summary(activity: Activity):

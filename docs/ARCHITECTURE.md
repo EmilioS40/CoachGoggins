@@ -23,8 +23,8 @@ Les fonctions suivantes sont opérationnelles :
 - reprise automatique après redémarrage de la Raspberry Pi ;
 - API FastAPI pour le coach ;
 - protection de l'API coach par jeton Bearer ;
-- génération de `/opt/sport/exports/sport.xlsx` ;
-- test d'accès externe avec un Quick Tunnel Cloudflare.
+- génération de `/opt/sport/exports/Sport_report.xlsx` ;
+- acces externe HTTPS permanent avec Tailscale Funnel.
 
 Les éléments suivants restent à stabiliser :
 
@@ -50,8 +50,8 @@ flowchart TD
     H --> I[FastAPI]
     H --> J[Générateur Excel]
     I --> K[Coach IA]
-    J --> L[sport.xlsx]
-    I -. HTTPS futur .-> M[Cloudflare Tunnel]
+    J --> L[Sport_report.xlsx]
+    I -. HTTPS .-> M[Tailscale Funnel]
     M -.-> K
 ```
 
@@ -69,7 +69,7 @@ Strava peut continuer à recevoir les activités depuis Garmin Connect pour l'us
 8. Le parseur FIT extrait la session, les tours et les enregistrements.
 9. L'ensemble est écrit dans PostgreSQL de façon idempotente.
 10. L'API coach voit immédiatement les nouvelles données.
-11. Le fichier Excel les inclut lors de sa prochaine génération.
+11. Si au moins une activité est nouvelle, la synchronisation régénère automatiquement `Sport_report.xlsx`.
 
 Le classeur Excel n'est donc pas la source de vérité. PostgreSQL et les fichiers FIT originaux sont les sources principales.
 
@@ -92,17 +92,21 @@ Le classeur Excel n'est donc pas la source de vérité. PostgreSQL et les fichie
 - Garmin Connect : bibliothèque `garminconnect` non officielle.
 - FIT : SDK FIT Garmin.
 - Excel : `openpyxl`.
-- Port actuel : `8000` publié par Docker.
+- Port actuel : `8000` publié uniquement sur `127.0.0.1` ; l'accès externe passe par Tailscale Funnel.
 
-### 5.3 Cloudflare Tunnel
+### 5.3 Tailscale Funnel
 
-Le tunnel permanent n'est pas encore intégré au déploiement principal. Un Quick Tunnel a validé le chemin suivant :
+Tailscale Funnel publie actuellement le chemin suivant sans ouverture de port
+sur la box :
 
 ```text
-Internet -> Cloudflare -> FastAPI -> PostgreSQL
+Internet -> Tailscale Funnel -> FastAPI -> PostgreSQL
 ```
 
-Les Quick Tunnels utilisent une adresse aléatoire `*.trycloudflare.com` qui change à chaque lancement et ne doivent servir qu'aux tests. La cible finale est un tunnel nommé, lancé comme service Docker, associé à un domaine stable.
+L'URL publique actuelle est `https://rpi-home.tail3f4428.ts.net`. Funnel ne
+publie que le service FastAPI local ; PostgreSQL reste prive sur le reseau
+Docker. La configuration est persistante (`tailscale funnel --bg`) et survit
+aux redemarrages.
 
 ## 6. Arborescence de référence
 
@@ -145,7 +149,7 @@ Les Quick Tunnels utilisent une adresse aléatoire `*.trycloudflare.com` qui cha
 ├── garmin-tokens/               # secret et persistant, ignoré par Git
 ├── data/
 │   └── activities/              # FIT et archives, ignorés par Git
-├── exports/                     # sport.xlsx, ignoré par Git
+├── exports/                     # Sport_report.xlsx, ignoré par Git
 └── backups/                     # sauvegardes, ignorées par Git
 ```
 
@@ -199,7 +203,7 @@ Les dossiers de données sont créés lors de l'installation et ne sont pas vers
 
 - lit PostgreSQL ;
 - reconstruit entièrement le classeur Excel ;
-- écrit `/var/lib/sport/exports/sport.xlsx` dans le conteneur, monté vers `/opt/sport/exports/sport.xlsx` sur l'hôte ;
+- écrit `/var/lib/sport/exports/Sport_report.xlsx` dans le conteneur, monté vers `/opt/sport/exports/Sport_report.xlsx` sur l'hôte ;
 - ne modifie pas la base de données.
 
 ### `app/api/coach.py`
@@ -352,13 +356,13 @@ Une sauvegarde complète doit couvrir au minimum PostgreSQL, les FIT et les jeto
 
 - `garminconnect` utilise des endpoints Garmin non officiels et peut casser après une évolution de Garmin Connect.
 - Des connexions complètes répétées peuvent provoquer des réponses HTTP 429. Les jetons persistés doivent être réutilisés.
-- Le Quick Tunnel Cloudflare n'offre ni adresse stable ni garantie de disponibilité.
+- Tailscale Funnel est adapte a cet usage personnel mais reste un service beta ;
+  un domaine personnel et un reverse proxy pourront etre ajoutes si le projet
+  devient public ou multi-utilisateur.
 - L'API coach donne accès à des données personnelles sensibles. Son jeton doit être long, secret et révocable.
 - La microSD d'origine était petite. Pour une exploitation durable, un SSD USB et une vraie stratégie de sauvegarde sont recommandés.
 
 ## 15. Références techniques
 
 - Docker Engine sur Debian : https://docs.docker.com/engine/install/debian/
-- Cloudflare Tunnel : https://developers.cloudflare.com/tunnel/
-- Mise en place d'un tunnel nommé : https://developers.cloudflare.com/tunnel/setup/
-
+- Tailscale Funnel : https://tailscale.com/docs/features/tailscale-funnel

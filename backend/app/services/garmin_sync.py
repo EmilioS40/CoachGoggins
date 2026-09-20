@@ -263,6 +263,7 @@ def get_history(api, max_activities=None):
 
     offset = 0
     processed = 0
+    new_activities = 0
 
     while True:
 
@@ -287,10 +288,11 @@ def get_history(api, max_activities=None):
 
         for activity in activities:
 
-            sync_activity(
+            if sync_activity(
                 api,
                 activity,
-            )
+            ):
+                new_activities += 1
 
             processed += 1
 
@@ -302,7 +304,12 @@ def get_history(api, max_activities=None):
         if len(activities) < limit:
             break
 
-    print(f"\nTerminé : {processed} activités examinées.")
+    print(
+        f"\nTerminé : {processed} activités examinées, "
+        f"{new_activities} nouvelles."
+    )
+
+    return new_activities
 
 
 def main():
@@ -343,17 +350,31 @@ def main():
             f"{count} activités Garmin trouvées."
         )
 
-        get_history(
+        new_activities = get_history(
             api,
             max_activities=None,
         )
 
     else:
 
-        get_history(
+        new_activities = get_history(
             api,
             max_activities=args.limit,
         )
+
+    if new_activities:
+        print("\nNouvelles activités détectées : génération du rapport Excel...")
+
+        try:
+            from app.services.generate_excel import main as generate_excel
+
+            generate_excel()
+
+        except Exception as exc:
+            print(
+                "[WARN] Les activités sont synchronisées, "
+                f"mais le rapport Excel n'a pas pu être généré : {exc}"
+            )
 
 
 if __name__ == "__main__":
