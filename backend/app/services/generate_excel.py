@@ -1,4 +1,8 @@
+import argparse
+import csv
 import math
+import os
+import tempfile
 from collections import defaultdict
 from copy import copy
 from datetime import date, datetime, timedelta
@@ -393,7 +397,7 @@ def monthly_year_data(activities, year, today):
     rows = []
 
     for month in range(1, 13):
-        value = round(totals[(year, month)], 2) if month <= today.month else None
+        value = round(totals[(year, month)], 2) if date(year, month, 1) <= today else None
         rows.append([date(year, month, 1), value])
 
     return rows
@@ -1111,18 +1115,17 @@ def make_calendar(ws, activities, year, start_row=4, start_col=10):
     ws.row_dimensions[header_row].height = 20
 
 
-def make_dashboard(wb, activities):
+def make_dashboard(wb, activities, year):
     ws = wb["Dashboard"]
     setup_sheet(ws, "A4")
 
-    today = datetime.now().date()
-    year = today.year
+    today = min(datetime.now().date(), date(year, 12, 31))
     sport_activities = [a for a in activities if is_running_or_trail(a)]
 
     write_title(
         ws,
         "Sport Dashboard",
-        f"Annee en cours : {year} - course a pied et trail",
+        f"Annee : {year} - course a pied et trail",
     )
 
     headers = [
@@ -1552,17 +1555,16 @@ def make_all_sheet(ws, activities):
     autosize(ws)
 
 
-def build_workbook(activities):
+def build_workbook(activities, year):
     wb = Workbook()
     wb.active.title = "Dashboard"
     ws_weeks = wb.create_sheet("Semaines")
     ws_activities = wb.create_sheet("Activites")
     ws_records = wb.create_sheet("Records")
-    ws_all = wb.create_sheet("All")
 
     weeks = weekly_rows(activities)
 
-    make_dashboard(wb, activities)
+    make_dashboard(wb, activities, year)
 
     make_table_sheet(
         ws_weeks,
@@ -1624,22 +1626,82 @@ def build_workbook(activities):
     )
 
     make_records_sheet(ws_records, activities, weeks)
-    make_all_sheet(ws_all, activities)
 
     wb.calculation.fullCalcOnLoad = True
     return wb
 
 
-def main():
+def build_global_workbook(activities):
+    wb = Workbook()
+    ws_all = wb.active
+    ws_all.title = "All"
+    ws_records = wb.create_sheet("Records")
+    make_all_sheet(ws_all, activities)
+    make_records_sheet(ws_records, activities, weekly_rows(activities))
+    wb.calculation.fullCalcOnLoad = True
+    return wb
+
+
+def atomic_write(path, writer):
+    path.parent.mkdir(parents=True, exist_ok=True)
+    fd, temporary = tempfile.mkstemp(dir=path.parent, suffix=path.suffix)
+    os.close(fd)
+    try:
+        writer(Path(temporary))
+        # Give the export directory owner access while keeping files private.
+        if hasattr(os, "geteuid") and os.geteuid() == 0:
+            owner = path.parent.stat()
+            os.chown(temporary, owner.st_uid, owner.st_gid)
+        os.replace(temporary, path)
+    finally:
+        if os.path.exists(temporary):
+            os.unlink(temporary)
+
+
+def write_csv(path, activities):
+    headers = ["Date", "Heure", "Nom", "Categorie", "Type Garmin", "Distance km",
+               "Duree secondes", "Allure secondes/km", "D+ m", "D- m", "FC moy.",
+               "FC max.", "Cadence", "Puissance moy.", "Puissance norm.",
+               "Puissance max.", "TE aerobie", "TE anaerobie", "VO2max", "Calories", "Garmin ID"]
+    with path.open("w", encoding="utf-8-sig", newline="") as output:
+        writer = csv.writer(output, delimiter=";")
+        writer.writerow(headers)
+        for row in activity_rows(activities):
+            row[6] = round(row[6] * 86400, 2) if row[6] is not None else None
+            row[7] = round(row[7] * 86400, 2) if row[7] is not None else None
+            writer.writerow(row)
+
+
+def generate_exports(years=None, export_path=EXPORT_PATH):
     activities = load_activities()
-    EXPORT_PATH.parent.mkdir(parents=True, exist_ok=True)
+    by_year = defaultdict(list)
+    for activity in activities:
+        day = activity_day(activity)
+        if day:
+            by_year[day.year].append(activity)
+    selected_years = sorted(by_year if years is None else set(years))
+    for year in selected_years:
+        path = export_path.parent / f"Sport_report_{year}.xlsx"
+        wb = build_workbook(by_year[year], year)
+        atomic_write(path, wb.save)
+        print(f"Excel genere : {path}")
+    global_wb = build_global_workbook(activities)
+    atomic_write(export_path, global_wb.save)
+    csv_path = export_path.parent / "Sport_activities.csv"
+    atomic_write(csv_path, lambda path: write_csv(path, activities))
+    print(f"Excel global genere : {export_path}")
+    print(f"CSV genere : {csv_path} ({len(activities)} activites)")
+    undated = sum(1 for activity in activities if not activity_day(activity))
+    if undated:
+        print(f"[WARN] {undated} activites sans date : incluses dans le CSV et les records globaux, sans fichier annuel.")
 
-    wb = build_workbook(activities)
-    wb.save(EXPORT_PATH)
 
-    print(f"Excel genere : {EXPORT_PATH}")
-    print(f"Activites chargees : {len(activities)}")
-    print(f"Taille : {EXPORT_PATH.stat().st_size} octets")
+def main():
+    parser = argparse.ArgumentParser(description="Generer les rapports sportifs")
+    parser.add_argument("--year", type=int, action="append", dest="years",
+                        help="Annee a regenerer (repetable ; par defaut toutes)")
+    args = parser.parse_args()
+    generate_exports(args.years)
 
 
 if __name__ == "__main__":

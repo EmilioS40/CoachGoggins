@@ -264,6 +264,8 @@ def get_history(api, max_activities=None):
     offset = 0
     processed = 0
     new_activities = 0
+    new_years = set()
+    undated = False
 
     while True:
 
@@ -293,6 +295,16 @@ def get_history(api, max_activities=None):
                 activity,
             ):
                 new_activities += 1
+                # Reuse the export's local-date rule, including its UTC fallback.
+                from types import SimpleNamespace
+                from app.services.generate_excel import activity_day
+                day = activity_day(SimpleNamespace(
+                    raw_summary_json=activity, start_date=parse_start_date(activity)
+                ))
+                if day:
+                    new_years.add(day.year)
+                else:
+                    undated = True
 
             processed += 1
 
@@ -309,7 +321,7 @@ def get_history(api, max_activities=None):
         f"{new_activities} nouvelles."
     )
 
-    return new_activities
+    return new_activities, new_years, undated
 
 
 def main():
@@ -350,14 +362,14 @@ def main():
             f"{count} activités Garmin trouvées."
         )
 
-        new_activities = get_history(
+        new_activities, new_years, undated = get_history(
             api,
             max_activities=None,
         )
 
     else:
 
-        new_activities = get_history(
+        new_activities, new_years, undated = get_history(
             api,
             max_activities=args.limit,
         )
@@ -366,9 +378,9 @@ def main():
         print("\nNouvelles activités détectées : génération du rapport Excel...")
 
         try:
-            from app.services.generate_excel import main as generate_excel
+            from app.services.generate_excel import generate_exports
 
-            generate_excel()
+            generate_exports(None if undated else new_years)
 
         except Exception as exc:
             print(

@@ -23,7 +23,7 @@ Les fonctions suivantes sont opérationnelles :
 - reprise automatique après redémarrage de la Raspberry Pi ;
 - API FastAPI pour le coach ;
 - protection de l'API coach par jeton Bearer ;
-- génération de `/opt/sport/exports/Sport_report.xlsx` ;
+- génération de rapports Excel annuels et globaux et d’un CSV des activités ;
 - acces externe HTTPS permanent avec Tailscale Funnel.
 
 Les éléments suivants restent à stabiliser :
@@ -69,7 +69,7 @@ Strava peut continuer à recevoir les activités depuis Garmin Connect pour l'us
 8. Le parseur FIT extrait la session, les tours et les enregistrements.
 9. L'ensemble est écrit dans PostgreSQL de façon idempotente.
 10. L'API coach voit immédiatement les nouvelles données.
-11. Si au moins une activité est nouvelle, la synchronisation régénère automatiquement `Sport_report.xlsx`.
+11. Si au moins une activité est nouvelle, la synchronisation régénère les fichiers des années concernées, le bilan global et le CSV.
 
 Le classeur Excel n'est donc pas la source de vérité. PostgreSQL et les fichiers FIT originaux sont les sources principales.
 
@@ -203,7 +203,7 @@ Les dossiers de données sont créés lors de l'installation et ne sont pas vers
 
 - lit PostgreSQL ;
 - reconstruit entièrement le classeur Excel ;
-- écrit `/var/lib/sport/exports/Sport_report.xlsx` dans le conteneur, monté vers `/opt/sport/exports/Sport_report.xlsx` sur l'hôte ;
+- écrit les rapports dans `/var/lib/sport/exports/`, monté sur `/opt/sport/exports/` : `Sport_report_ANNEE.xlsx` par année, `Sport_report.xlsx` pour les comparaisons et records globaux, et `Sport_activities.csv` pour toutes les activités ;
 - ne modifie pas la base de données.
 
 ### `app/api/coach.py`
@@ -305,16 +305,15 @@ Le détail du contrat coach se trouve dans `COACH_IA.md`.
 
 ## 10. Classeur Excel
 
-Le classeur contient :
+Chaque classeur annuel contient :
 
 - `Dashboard` : année en cours, statistiques de période, graphiques et calendrier ;
 - `Semaines` : agrégats course à pied et trail, triés de la plus récente à la plus ancienne ;
 - `Activites` : historique détaillé, trié du plus récent au plus ancien ;
 - `Records` : records route, trail et généraux ;
-- `All` : comparaison annuelle de l'historique ;
 - `_Data` : feuille technique masquée utilisée par les graphiques.
 
-Le classeur peut être supprimé et régénéré sans perte de données.
+Le classeur global contient `All` (comparaison annuelle) et `Records` (toutes années). Le CSV contient toutes les activités, y compris celles sans date. La commande de génération manuelle reconstruit tous les fichiers ; `--year 2025` limite les fichiers annuels reconstruits à cette année tout en actualisant le global et le CSV. Les exports peuvent être régénérés sans perte de données.
 
 ## 11. Sécurité
 

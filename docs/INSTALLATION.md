@@ -321,7 +321,7 @@ docker compose exec sport-backend \
 
 Une seconde exécution sans nouvelle activité ne doit pas créer de doublons.
 Lorsqu'au moins une nouvelle activité est importée, la synchronisation regenere
-automatiquement `/opt/sport/exports/Sport_report.xlsx`.
+automatiquement les rapports annuels des années concernées, le bilan global `Sport_report.xlsx` et `Sport_activities.csv`.
 
 ### 11.2 Vérifier les activités
 
@@ -727,3 +727,6 @@ git commit -m "Initial sport platform"
 - [ ] `Sport_report.xlsx` est généré.
 - [ ] L'API coach refuse les appels sans clé.
 - [ ] Une sauvegarde PostgreSQL est créée et copiée hors de la Pi.
+
+
+La génération manuelle de `app.services.generate_excel` reconstruit tous les fichiers annuels, le bilan global et le CSV. Pour limiter les fichiers annuels, ajouter `--year 2025` (option répétable). Le bilan global et le CSV sont toujours actualisés. Les anciens exports ne sont pas supprimés.

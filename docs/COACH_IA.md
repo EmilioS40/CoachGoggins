@@ -281,13 +281,7 @@ Le fichier est situé sur la Raspberry Pi :
 /opt/sport/exports/Sport_report.xlsx
 ```
 
-Il contient une synthèse pratique :
-
-- Dashboard de l'année en cours ;
-- agrégats hebdomadaires ;
-- activités ;
-- records ;
-- comparaison annuelle.
+Il contient la comparaison et les records de toutes les années. Chaque fichier `Sport_report_ANNEE.xlsx` contient le tableau de bord, les agrégats hebdomadaires, les activités et les records de l'année. `Sport_activities.csv` liste toutes les activités.
 
 L'API expose également :
 
@@ -295,12 +289,12 @@ L'API expose également :
 GET /api/coach/export/excel
 ```
 
-Cet endpoint retourne le fichier `Sport_report.xlsx`. L'agent peut l'utiliser
-pour une vue tabulaire complète, mais il doit privilégier les endpoints JSON
+Cet endpoint retourne le bilan global `Sport_report.xlsx`. Le paramètre facultatif `?year=2025` retourne `Sport_report_2025.xlsx` si ce fichier existe. L'agent peut l'utiliser
+pour consulter les bilans, mais il doit privilégier les endpoints JSON
 pour les analyses et ne doit pas supposer que le classeur est plus à jour que
 PostgreSQL.
 
-Il n'existe pas encore d'endpoint confirmé `GET /api/coach/export/excel`. Ne pas tenter de l'appeler tant qu'il n'a pas été implémenté et documenté.
+Les fichiers annuels et le bilan global sont générés séparément ; une année absente retourne une erreur 404.
 
 ## 10. Format attendu des réponses du coach
 
@@ -393,7 +387,6 @@ GET  /api/coach/trends
 GET  /api/coach/training-load
 GET  /api/coach/planned-sessions
 POST /api/coach/planned-sessions
-GET  /api/coach/export/excel
 ```
 
 Cette liste décrit une direction, pas un contrat actuellement disponible. Tout nouvel endpoint doit être ajouté à ce document avec :
